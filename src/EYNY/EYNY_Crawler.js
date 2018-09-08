@@ -3,33 +3,14 @@ import path from 'path';
 import url from 'url';
 import request from 'request';
 import cheerio from 'cheerio';
+import { autoUrl, headers, SELECTOR, AUTH } from './config';
 
-const baseUrl = url.parse('https://www.eyny.com/search.php?searchsubmit=yes');
-const authUrl = url.parse(
-  'https://www.eyny.com/member.php?mod=logging&action=login&loginsubmit=yes&loginhash=LJ8fW&inajax=1'
-);
+const baseUrl = url.parse(autoUrl.sch);
+const authUrl = url.parse(autoUrl.login);
 
-const headers = {
-  Connection: 'keep-alive',
-  Accept:
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-  Origin: 'https://www.eyny.com',
-  'Upgrade-Insecure-Requests': 1,
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36'
-};
+const { username, password } = AUTH;
 
-const DATA_LIST_SELECTOR = '#threadlist > div > table > tbody > tr > th a';
-const NEXT_PAGE_BUTTON_SELECTOR =
-  '#threadlist > table:nth-child(1) > tbody > tr > td:nth-child(3) > div.pgs.cl.mbm > div > a.nxt';
-const FICTION_IMAGE_SELECTOR =
-  '#postlist > div:nth-child(3) > table > tbody > tr:nth-child(1) > td.plc > div.pct > div.pcb > div.t_fsz > table > tbody > tr > td > ignore_js_op > img';
-const FICTION_CONTENT_SELECTOR =
-  '#postlist > div > table > tbody > tr:nth-child(1) > td.plc > div.pct > div.pcb > div.t_fsz > table > tbody > tr > td';
-
-const searchKeyWord = 'OVERLORD';
-const username = 'leadingtwTest1';
-const password = 'SWemegPycsempA2';
+const searchKeyWord = '從零開始的異世界生活';
 
 const to = promise => promise.then(data => [null, data]).catch(err => [err]);
 const composeUrl = urlPath => url.resolve(baseUrl.href, urlPath);
@@ -68,7 +49,7 @@ const getAuth = () =>
     });
   });
 
-const getSrchPage = () =>
+const getSchPage = () =>
   new Promise((resolve, reject) => {
     const opt = {
       url: baseUrl,
@@ -84,12 +65,10 @@ const getSrchPage = () =>
 
     request(opt, (err, res) => {
       if (err) return reject(err);
-      const srchLink = composeUrl(res.headers.location);
+      const schLink = composeUrl(res.headers.location);
 
-      console.log(
-        `getSrchPage \n complete: <${res.statusCode}> => ${srchLink}`
-      );
-      return resolve(srchLink);
+      console.log(`getSchPage \n complete: <${res.statusCode}> => ${schLink}`);
+      return resolve(schLink);
     });
   });
 
@@ -100,26 +79,22 @@ const getFictionPage = targetUrl =>
       headers,
       timeout: 60000
     };
-    let nextPage = false;
-    let target = false;
 
     request(opt, (err, res, body) => {
       if (err) return reject(err);
 
       const $ = cheerio.load(body);
+      let nextPage = false;
+      let target = false;
 
-      if (!findDom($(body), DATA_LIST_SELECTOR)) {
-        target = false;
-      } else {
-        target = $(DATA_LIST_SELECTOR)
+      if (findDom($(body), SELECTOR.DATA_LIST)) {
+        target = $(SELECTOR.DATA_LIST)
           .map((index, obj) => domDataSet($(obj)))
           .get();
       }
 
-      if (!findDom($(body), NEXT_PAGE_BUTTON_SELECTOR)) {
-        nextPage = false;
-      } else {
-        nextPage = composeUrl($(NEXT_PAGE_BUTTON_SELECTOR).attr('href'));
+      if (findDom($(body), SELECTOR.NEXT_PAGE_BUTTON)) {
+        nextPage = composeUrl($(SELECTOR.NEXT_PAGE_BUTTON).attr('href'));
       }
 
       console.log(
@@ -172,10 +147,10 @@ const getFictionData = content =>
       const $ = cheerio.load(body);
 
       const data = {
-        content: $(FICTION_CONTENT_SELECTOR)
+        content: $(SELECTOR.FICTION_CONTENT)
           .map((index, obj) => $(obj).text())
           .get(),
-        img: $(FICTION_IMAGE_SELECTOR)
+        img: $(SELECTOR.FICTION_IMAGE)
           .map((index, obj) => $(obj).attr('file'))
           .get(),
         title: content.title
@@ -205,31 +180,42 @@ const getFictionDataList = pageList =>
     return resolve(pageInfo);
   });
 
+const createFictionFile = data =>
+  new Promise((resolve, reject) => {
+    try {
+      if (
+        !fs.existsSync(path.join(__dirname, `../../fictions/${searchKeyWord}/`))
+      ) {
+        fs.mkdirSync(`./fictions/${searchKeyWord}`);
+      }
+
+      data.forEach((ele, index) => {
+        const title = ele.title.split('/').join(':');
+        fs.writeFileSync(
+          `./fictions/${searchKeyWord}/${title}.txt`,
+          ele.content
+        );
+        fs.writeFileSync(
+          `./fictions/${searchKeyWord}/index.txt`,
+          `(${index + 1}): ${ele.title}\n`,
+          { flag: 'a' }
+        );
+
+        console.log(`fiction write to file done! => ${title}`);
+      });
+    } catch (err) {
+      reject(err);
+    }
+    resolve();
+  });
+
 getAuth()
-  .then(getSrchPage)
+  .then(getSchPage)
   .then(getFictionPageList)
   .then(getFictionDataList)
-  .then(data => {
-    if (!fs.existsSync(path.join(__dirname, `../fictions/${searchKeyWord}/`))) {
-      fs.mkdirSync(`./fictions/${searchKeyWord}`);
-      console.log('路徑已創建');
-    }
-
-    data.forEach((ele, index) => {
-      fs.writeFileSync(
-        `./fictions/${searchKeyWord}/${ele.title}.txt`,
-        ele.content
-      );
-      fs.writeFileSync(
-        `./fictions/${searchKeyWord}/index.txt`,
-        `(${index + 1}): ${ele.title}\n`,
-        { flag: 'a' }
-      );
-
-      console.log(`fiction write to file done! => ${ele.title}`);
-    });
-
-    console.log('\ndone.');
+  .then(createFictionFile)
+  .then(() => {
+    console.log('\n finish');
   })
   .catch(err => {
     console.log(err);

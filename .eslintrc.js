@@ -8,6 +8,8 @@ module.exports = {
     'operator-linebreak': 'off',
     'implicit-arrow-linebreak': 'off',
     'comma-dangle': 'off',
-    'arrow-parens': 'off'
+    'arrow-parens': 'off',
+    'object-curly-newline': ['error', { multiline: true, minProperties: 5 }],
+    'import/named': 'off'
   }
 };

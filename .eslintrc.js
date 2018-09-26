@@ -10,6 +10,8 @@ module.exports = {
     'comma-dangle': 'off',
     'arrow-parens': 'off',
     'object-curly-newline': ['error', { multiline: true, minProperties: 5 }],
-    'import/named': 'off'
+    'import/named': 'off',
+    'nonblock-statement-body-position': 'off',
+    ''
   }
 };
